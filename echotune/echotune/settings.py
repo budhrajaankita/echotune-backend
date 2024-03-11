@@ -86,9 +86,9 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'echotune_db',
         'USER': 'echotune',
-        'PASSWORD': 'admin',
+        'PASSWORD': 'echotune',
         'HOST': 'localhost',
-        'PORT': '',
+        'PORT': '5432',
     }
 }
 
