@@ -14,7 +14,7 @@
 #### 1.2.1 Clone the Repository
 
 ```bash
-git clone <https://github.com/budhrajaankita/echotune-backend.git>
+git clone https://github.com/budhrajaankita/echotune-backend.git
 ```
 
 #### 1.2.2 Create and Activate a Virtual Environment

@@ -1,6 +1,6 @@
 from django.contrib.auth.models import User
 from rest_framework import serializers
-from .models import Topic
+from .models import Topic, Source
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -17,4 +17,9 @@ class UserSerializer(serializers.ModelSerializer):
 class TopicSerializer(serializers.ModelSerializer):
     class Meta:
         model = Topic
+        fields = ['id', 'name']
+
+class SourceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Source
         fields = ['id', 'name']

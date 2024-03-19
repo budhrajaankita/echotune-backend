@@ -5,18 +5,16 @@ import uuid
 class Topic(models.Model):
     name = models.CharField(max_length=100)
 
-    def __str__(self):
-        return self.name
+class Source(models.Model):
+    name = models.CharField(max_length=100)
     
 class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
-    topics = models.ManyToManyField(Topic)
-
-    def __str__(self):
-        return self.user.username
+    topics = models.ManyToManyField(Topic, related_name='user_profiles')
+    sources = models.ManyToManyField(Source, related_name='user_profiles')
 
 class GuestProfile(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    topics = models.ManyToManyField(Topic)
-    created = models.DateTimeField(auto_now_add=True)
+    session_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    topics = models.ManyToManyField(Topic, related_name='guest_profiles')
+    sources = models.ManyToManyField(Source, related_name='guest_profiles')
 
