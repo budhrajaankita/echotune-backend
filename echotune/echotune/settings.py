@@ -12,6 +12,17 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 
 from pathlib import Path
 
+import openai
+
+# OPENAI_API_KEY = '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'
+# openai.api_key = OPENAI_API_KEY
+
+# settings.py
+from decouple import config
+
+OPENAI_API_KEY = config('OPENAI_API_KEY')
+
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -41,6 +52,12 @@ INSTALLED_APPS = [
     "corsheaders",
     'echoapp',
 ]
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+}
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
