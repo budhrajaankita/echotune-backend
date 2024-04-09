@@ -100,10 +100,12 @@ def fetch_news(request):
         "id": idx,
         "title": article["title"],
         "description": article["description"],
+        "content": article["content"],
         "url": article["url"],
         "image": article["image"],
         "publishedAt": article["publishedAt"],
-        "source": article["source"]["name"]
+        "source_name": article["source"]["name"],
+        "source_url": article["source"]["url"]
     } for idx, article in enumerate(news_data.get('articles', []))]
 
     return Response(formatted_news)
