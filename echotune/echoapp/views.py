@@ -109,7 +109,6 @@ def login_user(request):
 def learning_goal(request):
     learning_goal = request.data.get('learningGoal')
     
-    print(learning_goal)
     if not learning_goal:
         return Response({'error': 'No text provided!'}, status=400)
     
@@ -117,9 +116,9 @@ def learning_goal(request):
 
     if not client:
         raise ValueError("Missing OpenAI API key.")
-    print(config('OPENAI_API_KEY'))
+    # print(config('OPENAI_API_KEY'))
 
-    prompt_text = f"Given the text: \"{learning_goal}\", identify the most relevant query including any specific timeframes for searching articles related to this topic."
+    prompt_text = f"Given the text: \"{learning_goal}\", identify 10 most relevant keywords or tags that can help categorize articles related to this topic. Create a list based on relevance. Return the list as comma separated values"
     print(prompt_text)
     try:
         response = client.chat.completions.create(
@@ -129,19 +128,10 @@ def learning_goal(request):
                 "content": prompt_text}])
             # max_tokens=5)
 
-    # try:
-    #     response = openai.Completion.create(
-    #         engine="davinci",
-    #         prompt=prompt_text,
-    #         max_tokens=50,
-    #         n=1,
-    #         stop=None,
-    #         temperature=0.3
-    #     )
-
     #     # keywords = response.choices[0].text.strip()
-        print(response.choices[0].message.content)
-        return Response({'status': 'success', 'learningGoal': learning_goal})
+        generateTags = response.choices[0].message.content.strip()
+        print(generateTags)
+        return Response({'status': 'success', 'GeneratedTags': generateTags})
 
 
         # return Response({'keywords': keywords})
