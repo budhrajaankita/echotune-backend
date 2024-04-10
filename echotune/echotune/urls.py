@@ -17,7 +17,8 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path
 from django.contrib.auth import views as auth_views
-from echoapp.views import register_user, save_preferences, fetch_news
+from echoapp.views import register_user, save_preferences, learning_goal, login_user, fetch_news
+
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -25,6 +26,8 @@ urlpatterns = [
     # path('logout/', auth_views.LogoutView.as_view(), name='logout'),
     path('api/register/', register_user, name='register'),
     path('api/save_preferences/', save_preferences, name='save_preferences'),
+    path('api/learning-goal/', learning_goal, name='api_learning_goal'),
+    path('api/login/', login_user, name='api_login'),
     path('api/fetch_news/', fetch_news, name='fetch_news'),
 ]
 
