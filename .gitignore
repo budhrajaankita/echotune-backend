@@ -2,3 +2,5 @@ env/Lib/python3.10/
 env/bin/
 
 __pycache__/
+
+.env

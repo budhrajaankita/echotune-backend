@@ -1,5 +1,7 @@
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.authtoken.models import Token
 from rest_framework import status
 from .models import UserProfile, GuestProfile, Topic, Source
 from .serializers import UserSerializer
@@ -9,7 +11,7 @@ from openai import OpenAI
 from decouple import config
 from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
-
+from django.conf import settings
 
 @api_view(['POST'])
 def register_user(request):
@@ -17,18 +19,27 @@ def register_user(request):
     if serializer.is_valid():
         user = serializer.save()
         if user:
+            token, _ = Token.objects.get_or_create(user=user)
             return Response({
                 "user": UserSerializer(user).data,
-                "message": "User Created Successfully."
+                "token": token.key,
+                "message": "🧏🏻‍♀️ User Created Successfully."
             }, status=status.HTTP_201_CREATED)
     else:
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def save_preferences(request):
     is_guest = request.data.get('is_guest')
-    session_id = uuid.UUID(request.data.get('session_id', None))
+    session_id_str = request.data.get('session_id', None)
+
+    try:
+        session_id = uuid.UUID(session_id_str) if session_id_str else None
+    except ValueError:
+        return Response({"error": "Invalid session_id provided"}, status=status.HTTP_400_BAD_REQUEST)
+
     topics_names = request.data.get('topics', [])
     sources_names = request.data.get('sources', [])
 
@@ -52,6 +63,7 @@ def save_preferences(request):
 
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def fetch_news(request):
     is_guest = request.query_params.get('is_guest')
     session_id = request.query_params.get('session_id', None)
@@ -67,14 +79,38 @@ def fetch_news(request):
     topics = profile.topics.all()
     sources = profile.sources.all()
 
-    query = ' OR '.join([topic.name for topic in topics])
-    sources_query = 'source:(' + ' OR '.join([source.name for source in sources]) + ')'
+    # Constructing the query
+    topics = [topic.name for topic in profile.topics.all()]
+    topics_query = ' OR '.join(topics)
+    query_params = {
+        'q': topics_query,
+        'lang': 'en', 
+        'sortBy': 'publishedAt',  # Sort by publication date
+        'apikey': settings.GNEWS_API_KEY,
+    }
 
-    api_url = f'https://newsapi.org/v2/everything?q={query} AND {sources_query}&apiKey=YOUR_API_KEY'
-    response = requests.get(api_url)
+    # Making the request to GNews API
+    api_url = 'https://gnews.io/api/v4/search'
+    response = requests.get(api_url, params=query_params)
+    
+    if response.status_code != 200:
+        # Handling possible errors from the API request
+        return Response({"error": "Failed to fetch news from GNews"}, status=response.status_code)
+
     news_data = response.json()
 
-    formatted_news = [{"id": idx, "title": article["title"]} for idx, article in enumerate(news_data.get('articles', []))]
+    # Formatting the response
+    formatted_news = [{
+        "id": idx,
+        "title": article["title"],
+        "description": article["description"],
+        "content": article["content"],
+        "url": article["url"],
+        "image": article["image"],
+        "publishedAt": article["publishedAt"],
+        "source_name": article["source"]["name"],
+        "source_url": article["source"]["url"]
+    } for idx, article in enumerate(news_data.get('articles', []))]
 
     return Response(formatted_news)
 

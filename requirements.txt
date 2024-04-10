@@ -8,3 +8,4 @@ typing_extensions==4.10.0
 django-cors-headers==4.3.1
 python-decouple
 djangorestframework-simplejwt
+python-dotenv==1.0.1
