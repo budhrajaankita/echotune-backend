@@ -12,6 +12,8 @@ from decouple import config
 from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.conf import settings
+import logging
+
 
 @api_view(['POST'])
 def register_user(request):
@@ -30,8 +32,33 @@ def register_user(request):
 
 
 @api_view(['POST'])
+def login_user(request):
+    username = request.data.get('username')
+    password = request.data.get('password')
+    user = authenticate(request, username=username, password=password)
+    
+    if user is not None:
+        token, _ = Token.objects.get_or_create(user=user)
+        return Response({
+            'token': token.key,
+            'user': {
+                'id': user.id,
+                'username': user.username,
+                'email': user.email
+            },
+            "message": "Login Successful."
+        }, status=status.HTTP_200_OK)
+    else:
+        # Authentication failed
+        return Response({"error": "Invalid username or password"}, status=status.HTTP_401_UNAUTHORIZED)
+
+
+@api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def save_preferences(request):
+    auth_header = request.META.get('HTTP_AUTHORIZATION')
+    print(f"Received auth header: {auth_header}")
+
     is_guest = request.data.get('is_guest')
     session_id_str = request.data.get('session_id', None)
 
@@ -114,32 +141,6 @@ def fetch_news(request):
 
     return Response(formatted_news)
 
-
-@api_view(['POST'])
-def login_user(request):
-    username = request.data.get('username')
-    password = request.data.get('password')
-    user = authenticate(request, username=username, password=password)
-    
-    if user is not None:
-        # create token
-        refresh = RefreshToken.for_user(user)
-        resp =  Response({
-            'refresh': str(refresh),
-            'access': str(refresh.access_token),
-            'user': {
-                'id': user.id,
-                'username': user.username,
-                'email': user.email
-            },
-            "message": "Login Successful."
-        }, status=status.HTTP_200_OK)
-        print(resp)
-        return resp
-    else:
-        # Authentication failed
-        return Response({"error": "Invalid username or password"}, status=status.HTTP_401_UNAUTHORIZED)
-    
 
 @api_view(['POST'])
 def learning_goal(request):
