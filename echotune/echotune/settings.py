@@ -19,7 +19,6 @@ load_dotenv()
 
 import openai
 
-# OPENAI_API_KEY = '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'
 # openai.api_key = OPENAI_API_KEY
 
 # settings.py
@@ -184,4 +183,3 @@ CORS_ALLOW_ALL_ORIGINS = True
 
 # Google news API key
 GNEWS_API_KEY = os.getenv('GNEWS_API_KEY')
-GNEWS_API_KEY = "89c02d6818cc3be18d514becba9ff717"
