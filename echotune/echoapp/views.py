@@ -19,6 +19,7 @@ from django.conf import settings
 from django.http import HttpResponseNotFound, FileResponse  
 import os
 from hashlib import md5
+import logging
 
 
 @api_view(['POST'])
@@ -37,9 +38,52 @@ def register_user(request):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+# @api_view(['POST'])
+# def login_user(request):
+#     serializer = AuthTokenSerializer(data=request.data)
+#     if serializer.is_valid():
+#         user = serializer.validated_data['user']
+#         token, created = Token.objects.get_or_create(user=user)
+#         return Response({
+#             'user_id': user.pk,
+#             'username': user.username,
+#             'email': user.email,
+#             'token': token.key,
+#             'message': "Welcome back, {user.username}!"
+#         })
+#     else:
+#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+      
+@api_view(['POST'])
+def login_user(request):
+    username = request.data.get('username')
+    password = request.data.get('password')
+    user = authenticate(request, username=username, password=password)
+    
+    if user is not None:
+        token, _ = Token.objects.get_or_create(user=user)
+        return Response({
+            'token': token.key,
+            'user': {
+                'id': user.id,
+                'username': user.username,
+                'email': user.email
+            },
+            "message": "Login Successful."
+        }, status=status.HTTP_200_OK)
+    else:
+        # Authentication failed
+        return Response({"error": "Invalid username or password"}, status=status.HTTP_401_UNAUTHORIZED)
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def save_preferences(request):
+    auth_header = request.META.get('HTTP_AUTHORIZATION')
+    print(f"Received auth header: {auth_header}")
+
     is_guest = request.data.get('is_guest')
     session_id_str = request.data.get('session_id', None)
 
@@ -147,66 +191,7 @@ def register_user(request):
     else:
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-
-@api_view(['POST'])
-def login_user(request):
-    serializer = AuthTokenSerializer(data=request.data)
-    if serializer.is_valid():
-        user = serializer.validated_data['user']
-        token, created = Token.objects.get_or_create(user=user)
-        return Response({
-            'user_id': user.pk,
-            'username': user.username,
-            'email': user.email,
-            'token': token.key,
-            'message': "Welcome back, {user.username}!"
-        })
-    else:
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-    
-# def login_user(request):
-#     username = request.data.get('username')
-#     password = request.data.get('password')
-#     user = authenticate(username=username, password=password)
-#     if user:
-#         token, _ = Token.objects.get_or_create(user=user)
-#         return Response({
-#             'user': {
-#                 'id': user.id,
-#                 'username': user.username
-#             },
-#             'token': token.key,
-#             'message': 'Login successful.'
-#         }, status=status.HTTP_200_OK)
-#     else:
-#         return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
-    
-
-    # username = request.data.get('username')
-    # password = request.data.get('password')
-    # user = authenticate(request, username=username, password=password)
-    
-    # if user is not None:
-    #     # create token
-    #     refresh = RefreshToken.for_user(user)
-    #     resp =  Response({
-    #         'refresh': str(refresh),
-    #         'access': str(refresh.access_token),
-    #         'user': {
-    #             'id': user.id,
-    #             'username': user.username,
-    #             'email': user.email
-    #         },
-    #         "message": "Login Successful."
-    #     }, status=status.HTTP_200_OK)
-    #     print(resp)
-    #     return resp
-    # else:
-    #     # Authentication failed
-    #     return Response({"error": "Invalid username or password"}, status=status.HTTP_401_UNAUTHORIZED)
-    
+     
 
 @api_view(['POST'])
 # @permission_classes([IsAuthenticated])
