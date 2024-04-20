@@ -118,6 +118,18 @@ def save_preferences(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+def get_user_topics(request):
+    if request.user.is_authenticated:
+        user_profile = request.user.userprofile
+        topics = user_profile.topics.all()
+        topics_data = [{'id': topic.id, 'name': topic.name} for topic in topics]
+        return Response(topics_data)
+    else:
+        return Response({"error": "User is not authenticated"}, status=status.HTTP_401_UNAUTHORIZED)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def fetch_news(request):
     is_guest = request.query_params.get('is_guest')
     session_id = request.query_params.get('session_id', None)
@@ -137,6 +149,7 @@ def fetch_news(request):
 
     # Constructing the query
     topics = [topic.name for topic in profile.topics.all()]
+    # TODO: first try ADD, and then append OR to the results
     topics_query = ' OR '.join(topics)
     query_params = {
         'q': topics_query,
@@ -264,7 +277,6 @@ def generate_summary(request):
         print(f"OpenAI API call failed: {e}")
         return Response({'error': 'Failed to process the request'}, status=500)
         # return Response({'error': str(e)}, status=500)
-
 
 
 def serve_audio(request, filename):
