@@ -218,10 +218,8 @@ def learning_goal(request):
 
     if not client:
         raise ValueError("Missing OpenAI API key.")
-    # print(config('OPENAI_API_KEY'))
 
     prompt_text = f"Given the text: \"{learning_goal}\", identify 10 most relevant keywords or tags that can help categorize articles related to this topic. Create a list based on relevance. Return the list as comma separated values"
-    # print(prompt_text)
     try:
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
@@ -230,17 +228,13 @@ def learning_goal(request):
                 "content": prompt_text}])
             # max_tokens=5)
 
-    #     # keywords = response.choices[0].text.strip()fetc
+    #     # keywords = response.choices[0].text.strip()
         generateTags = response.choices[0].message.content.strip()
         print(generateTags)
         return Response({'status': 'success', 'GeneratedTags': generateTags})
-
-
-        # return Response({'keywords': keywords})
     except Exception as e:
         print(f"OpenAI API call failed: {e}")
         return Response({'error': 'Failed to process the request'}, status=500)
-        # return Response({'error': str(e)}, status=500)
 
 
 @api_view(['POST'])
@@ -254,10 +248,8 @@ def generate_summary(request):
 
     if not client:
         raise ValueError("Missing OpenAI API key.")
-    # print(config('OPENAI_API_KEY'))
 
     prompt_text = f"Given the text: \"{content}\", generate a summary which would make sense when an audio is generated from it."
-    # print(prompt_text)
     try:
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
@@ -266,17 +258,13 @@ def generate_summary(request):
                 "content": prompt_text}])
             # max_tokens=5)
 
-    #     # keywords = response.choices[0].text.strip()
         generatedSummary = response.choices[0].message.content.strip()
         print(generatedSummary)
         return Response({'status': 'success', 'generateSummary': generatedSummary})
 
-
-        # return Response({'keywords': keywords})
     except Exception as e:
         print(f"OpenAI API call failed: {e}")
-        return Response({'error': 'Failed to process the request'}, status=500)
-        # return Response({'error': str(e)}, status=500)
+        return Response({'error': 'Failed to process the generate summary request'}, status=500)
 
 
 def serve_audio(request, filename):
@@ -293,7 +281,6 @@ def serve_audio(request, filename):
             response = FileResponse(audio_file)
             return response
     else:
-        # Return a 404 response if the file does not exist
         return HttpResponseNotFound("Audio file not found")
 
 
@@ -309,12 +296,9 @@ def generate_audio(request, cache_directory='audio_cache'):
         return Response({'error': 'No article content provided!'}, status=status.HTTP_400_BAD_REQUEST)
     
     client = OpenAI(api_key=config('OPENAI_API_KEY'))
-    print("A")
-
 
     filename = f"{md5(summary.encode('utf-8')).hexdigest()}.mp3"
     filepath = os.path.join(cache_directory, filename)
-    print("B")
 
     # Check if the file already exists
     if not os.path.exists(filepath):
@@ -323,26 +307,20 @@ def generate_audio(request, cache_directory='audio_cache'):
         model="tts-1",
         voice="alloy",
         input=summary,
-    )
-        
-        print("C")
-
-        
+    )      
         # Save the audio file
         with open(filepath, 'wb') as audio_file:
             audio_file.write(response.content)
             print("D")
 
         print(f"Generated and saved audio to {filepath}")
-        audio_data = open(filepath, 'rb')
-        response = FileResponse(audio_data, content_type='audio/mpeg')
-        response['Content-Disposition'] = f'attachment; filename={filename}'
-        return response
     else:
         print(f"Audio file already cached at {filepath}")
 
-
-    return
+    audio_data = open(filepath, 'rb')
+    response = FileResponse(audio_data, content_type='audio/mpeg')
+    response['Content-Disposition'] = f'attachment; filename={filename}'
+    return response
     
 
 
