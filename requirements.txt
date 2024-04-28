@@ -1,5 +1,5 @@
 asgiref==3.7.2
-Django==5.0.3
+django
 djangorestframework==3.14.0
 psycopg2-binary==2.9.9
 pytz==2024.1
@@ -10,3 +10,4 @@ python-decouple
 djangorestframework-simplejwt
 python-dotenv==1.0.1
 openai
+requests
