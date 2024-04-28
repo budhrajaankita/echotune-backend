@@ -150,24 +150,43 @@ def fetch_news(request):
     # Constructing the query
     topics = [topic.name for topic in profile.topics.all()]
     # TODO: first try ADD, and then append OR to the results
-    topics_query = ' OR '.join(topics)
+    topics_query_and = ' AND '.join(f'"{topic}"' for topic in topics)
+
     query_params = {
-        'q': topics_query,
+        'q': topics_query_and,
         'lang': 'en', 
-        'sortBy': 'publishedAt',  # Sort by publication date
+        'sortBy': 'publishedAt',
         'apikey': settings.GNEWS_API_KEY,
-        'expand' : 'content'
+        'max': 5,
+        'from': "2024-01-01T01:00:00Z",
+        'expand': 'content'
     }
 
-    # Making the request to GNews API
+     # Making the request to GNews API
     api_url = 'https://gnews.io/api/v4/search'
-    response = requests.get(api_url, params=query_params)
-    
-    if response.status_code != 200:
-        # Handling possible errors from the API request
-        return Response({"error": "Failed to fetch news from GNews"}, status=response.status_code)
+    response_and = requests.get(api_url, params=query_params)
 
-    news_data = response.json()
+    articles = []
+
+    if response_and.status_code == 200:
+        news_data_and = response_and.json()
+        articles.extend(news_data_and.get('articles', []))
+
+    # Check the number of articles returned by the "AND" query
+    if len(articles) < 10:
+        # If less than 10 articles, make the "OR" query
+        topics_query_or = ' OR '.join(f'"{topic}"' for topic in topics)
+        query_params['q'] = topics_query_or
+        response_or = requests.get(api_url, params=query_params)
+        if response_or.status_code == 200:
+            news_data_or = response_or.json()
+            articles.extend(news_data_or.get('articles', []))
+
+    if not articles:
+        # If no articles found after both queries, return an error response
+        return Response({"error": "No articles found"}, status=404)
+    
+    # print(articles)
 
     # Formatting the response
     formatted_news = [{
@@ -180,9 +199,10 @@ def fetch_news(request):
         "publishedAt": article["publishedAt"],
         "source_name": article["source"]["name"],
         "source_url": article["source"]["url"]
-    } for idx, article in enumerate(news_data.get('articles', []))]
+    } for idx, article in enumerate(articles[:20])]
 
     return Response(formatted_news)
+
 
 @api_view(['POST'])
 def register_user(request):
@@ -218,14 +238,17 @@ def learning_goal(request):
 
     if not client:
         raise ValueError("Missing OpenAI API key.")
+    
 
-    prompt_text = f"Given the text: \"{learning_goal}\", identify 10 most relevant keywords or tags that can help categorize articles related to this topic. Create a list based on relevance. Return the list as comma separated values"
+    prompt_text = f"Given the text: \"{learning_goal}\", create an ordered comma separated values List of 10 most relevant keywords that might help identify news articles. Give me the python list."
     try:
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[{
-                "role": "user",
-                "content": prompt_text}])
+                "role": "system", "content": "You are a helpful assistant designed to output a python list, comma separated values.",
+                "role": "user", "content": prompt_text}])
+                # "role": "user",
+                # "content": prompt_text}])
             # max_tokens=5)
 
     #     # keywords = response.choices[0].text.strip()
@@ -249,7 +272,9 @@ def generate_summary(request):
     if not client:
         raise ValueError("Missing OpenAI API key.")
 
-    prompt_text = f"Given the text: \"{content}\", generate a summary which would make sense when an audio is generated from it."
+    # prompt_text = f"Given the text: \"{content}\", generate a summary which would make sense when an audio is generated from it."
+    prompt_text = f"Given the text: \"{content}\", generate a summary for spoken delivery of the following article that should last between 1 to 2 minutes. Focus on capturing the main points, important details, and any notable quotes or statistics. The summary should be engaging, easy to follow, and provide a clear understanding of the article's content. Don't give me keywords like summary in the output"
+
     try:
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
@@ -305,13 +330,12 @@ def generate_audio(request, cache_directory='audio_cache'):
 
         response = client.audio.speech.create(
         model="tts-1",
-        voice="alloy",
+        voice="echo",
         input=summary,
     )      
         # Save the audio file
         with open(filepath, 'wb') as audio_file:
             audio_file.write(response.content)
-            print("D")
 
         print(f"Generated and saved audio to {filepath}")
     else:
