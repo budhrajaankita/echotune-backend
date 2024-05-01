@@ -1,3 +1,4 @@
+import datetime
 from http.client import HTTPResponse
 from io import BytesIO
 from echotune.settings import BASE_DIR
@@ -152,13 +153,19 @@ def fetch_news(request):
     # TODO: first try ADD, and then append OR to the results
     topics_query_and = ' AND '.join(f'"{topic}"' for topic in topics)
 
+    yesterday = datetime.date.today() - datetime.timedelta(days=1)
+    yesterday_formatted = yesterday.strftime('%Y-%m-%dT00:00:00Z')
+    print(yesterday_formatted)
+
+
     query_params = {
         'q': topics_query_and,
         'lang': 'en', 
         'sortBy': 'publishedAt',
         'apikey': settings.GNEWS_API_KEY,
-        'max': 5,
-        # 'from': "2024-01-01T01:00:00Z",
+        'max': 12,
+        # 'from': str(yesterday_formatted),
+        'from': "2024-01-01T01:00:00Z",
         'expand': 'content'
     }
 
