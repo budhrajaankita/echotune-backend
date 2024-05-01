@@ -1,3 +1,4 @@
+import datetime
 from http.client import HTTPResponse
 from io import BytesIO
 from echotune.settings import BASE_DIR
@@ -152,12 +153,18 @@ def fetch_news(request):
     # TODO: first try ADD, and then append OR to the results
     topics_query_and = ' AND '.join(f'"{topic}"' for topic in topics)
 
+    yesterday = datetime.date.today() - datetime.timedelta(days=1)
+    yesterday_formatted = yesterday.strftime('%Y-%m-%dT00:00:00Z')
+    print(yesterday_formatted)
+
+
     query_params = {
         'q': topics_query_and,
         'lang': 'en', 
         'sortBy': 'publishedAt',
         'apikey': settings.GNEWS_API_KEY,
-        'max': 5,
+        'max': 12,
+        # 'from': str(yesterday_formatted),
         'from': "2024-01-01T01:00:00Z",
         'expand': 'content'
     }
@@ -224,6 +231,48 @@ def register_user(request):
     else:
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+
+# def clean_keywords(keywords):
+#   clean_keywords = []
+#   print("here")
+
+#   if len(keywords.split(',')) != 10:
+#     raise ValueError("Incorrect number of keywords (expected 10)")
+
+#   for keyword in keywords.split(','):
+#     # Remove leading and trailing quotes if present (using regular expressions)
+#     import re
+#     cleaned_keyword = re.sub(r'^"|"$', '', keyword)
+#     # Remove any remaining quotes within the phrase (optional)
+#     cleaned_keyword = cleaned_keyword.replace('"', '')  # Can be commented out if internal quotes are allowed
+#     cleaned_keyword = cleaned_keyword.replace(',', '')  # Can be commented out if internal quotes are allowed
+#     cleaned_keyword = keyword.split('.')[1].strip()
+
+#     clean_keywords.append(cleaned_keyword)
+
+#   return clean_keywords
+
+def clean_keywords(keywords):
+  clean_keywords = []
+
+  # Check for unexpected format (optional)
+  if len(keywords.split(',')) < 5:
+    raise ValueError("Incorrect number of keywords (expected 10)")
+  
+  for keyword in keywords.split(','):
+    # Remove leading and trailing quotes if present (using regular expressions)
+    import re
+    cleaned_keyword = re.sub(r'^"|"$', '', keyword)
+    # .strip()
+
+    # Separate words with commas, replace existing commas within words
+    cleaned_keyword = cleaned_keyword.replace('"', '')  # Can be commented out if internal quotes are allowed
+    clean_keyword = cleaned_keyword.replace(',', ' ').split(' ')
+    clean_keyword = ' '.join(clean_keyword)  # Join back with commas
+    clean_keywords.append(clean_keyword)
+
+
+  return (clean_keywords)
      
 
 @api_view(['POST'])
@@ -240,21 +289,46 @@ def learning_goal(request):
         raise ValueError("Missing OpenAI API key.")
     
 
-    prompt_text = f"Given the text: \"{learning_goal}\", create an ordered comma separated values List of 10 most relevant keywords that might help identify news articles. Give me the python list."
+    # prompt_text = f"Given the user goal: \"{learning_goal}\", create an ordered comma separated values List of 10 most relevant keywords that might help identify news articles. confirm the format of output: keyword a, keyword b, keyword c"
+    prompt_text = f"Take this learning goal : \"{learning_goal}\" and come up with 10 distinct most relevant 1-2 word search query strings to retrieve articles about this topic. Return these 10 queries in comma separated values (CSV) format"
+    
     try:
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[{
-                "role": "system", "content": "You are a helpful assistant designed to output a python list, comma separated values.",
+                "role": "system", "content": "You are a helpful assistant designed to output comma separated values.",
                 "role": "user", "content": prompt_text}])
                 # "role": "user",
                 # "content": prompt_text}])
             # max_tokens=5)
 
     #     # keywords = response.choices[0].text.strip()
-        generateTags = response.choices[0].message.content.strip()
-        print(generateTags)
-        return Response({'status': 'success', 'GeneratedTags': generateTags})
+
+        keywords = response.choices[0].message.content.strip()
+        print(keywords)
+        print(len(keywords.split(',')))
+        if len(keywords.split(',')) > 5:
+            clean = clean_keywords(keywords)
+            print('clean_keywords {}'.format(clean))
+            return Response({'status': 'success', 'GeneratedTags': clean})
+        if len(keywords.split(',')) != 10:
+            return Response({'error': 'Unexpected keyword format (expected 10 keywords)'}, status=500)
+
+
+        elif "\n" in keywords:
+        # Extract keywords without numbering and newlines (modify based on separator)
+            keywords = [keyword.strip().rstrip(',') for keyword in keywords.split('\n')]
+            keywords = [keyword.strip('"') for keyword in keywords]
+            print("here {}".format(keywords))
+
+        elif len(keywords.split(',')) == 1:
+            keywords = keywords.split(',')
+        # Check if we have at least one keyword (adjust as needed)
+        if len(keywords) < 1:
+            return Response({'error': 'Failed to generate keywords'}, status=500)
+
+
+        return Response({'status': 'success', 'GeneratedTags': keywords})
     except Exception as e:
         print(f"OpenAI API call failed: {e}")
         return Response({'error': 'Failed to process the request'}, status=500)
