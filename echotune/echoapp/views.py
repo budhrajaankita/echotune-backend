@@ -173,7 +173,7 @@ def fetch_news(request):
      # Making the request to GNews API
     api_url = 'https://gnews.io/api/v4/search'
     response_and = requests.get(api_url, params=query_params)
-    print(response_and)
+    print(response_and.json)
 
     articles = []
 
@@ -239,26 +239,6 @@ def register_user(request):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-# def clean_keywords(keywords):
-#   clean_keywords = []
-#   print("here")
-
-#   if len(keywords.split(',')) != 10:
-#     raise ValueError("Incorrect number of keywords (expected 10)")
-
-#   for keyword in keywords.split(','):
-#     # Remove leading and trailing quotes if present (using regular expressions)
-#     import re
-#     cleaned_keyword = re.sub(r'^"|"$', '', keyword)
-#     # Remove any remaining quotes within the phrase (optional)
-#     cleaned_keyword = cleaned_keyword.replace('"', '')  # Can be commented out if internal quotes are allowed
-#     cleaned_keyword = cleaned_keyword.replace(',', '')  # Can be commented out if internal quotes are allowed
-#     cleaned_keyword = keyword.split('.')[1].strip()
-
-#     clean_keywords.append(cleaned_keyword)
-
-#   return clean_keywords
-
 def clean_keywords(keywords):
   clean_keywords = []
 
@@ -267,14 +247,14 @@ def clean_keywords(keywords):
     raise ValueError("Incorrect number of keywords (expected 10)")
   
   for keyword in keywords.split(','):
-    # Remove leading and trailing quotes if present (using regular expressions)
     import re
     cleaned_keyword = re.sub(r'^"|"$', '', keyword)
     # .strip()
 
-    # Separate words with commas, replace existing commas within words
-    cleaned_keyword = cleaned_keyword.replace('"', '')  # Can be commented out if internal quotes are allowed
+    cleaned_keyword = cleaned_keyword.replace('"', '')
     clean_keyword = cleaned_keyword.replace(',', ' ').split(' ')
+    cleaned_keyword = cleaned_keyword.strip()
+
     clean_keyword = ' '.join(clean_keyword)  # Join back with commas
     clean_keywords.append(clean_keyword)
 
