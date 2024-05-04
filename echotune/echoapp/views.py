@@ -1,6 +1,7 @@
 import datetime
 from http.client import HTTPResponse
 from io import BytesIO
+import re
 from echotune.settings import BASE_DIR
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
@@ -151,11 +152,10 @@ def fetch_news(request):
     # Constructing the query
     topics = [topic.name for topic in profile.topics.all()]
     # TODO: first try ADD, and then append OR to the results
-    topics_query_and = ' AND '.join(f'"{topic}"' for topic in topics)
+    topics_query_and = ' OR '.join(f'"{topic}"' for topic in topics)
 
-    yesterday = datetime.date.today() - datetime.timedelta(days=1)
-    yesterday_formatted = yesterday.strftime('%Y-%m-%dT00:00:00Z')
-    print(yesterday_formatted)
+    # yesterday = datetime.date.today() - datetime.timedelta(days=1)
+    # yesterday_formatted = yesterday.strftime('%Y-%m-%dT00:00:00Z')
 
 
     query_params = {
@@ -164,14 +164,16 @@ def fetch_news(request):
         'sortBy': 'publishedAt',
         'apikey': settings.GNEWS_API_KEY,
         'max': 12,
-        # 'from': str(yesterday_formatted),
-        'from': "2024-01-01T01:00:00Z",
         'expand': 'content'
     }
+
+    print(topics_query_and)
+
 
      # Making the request to GNews API
     api_url = 'https://gnews.io/api/v4/search'
     response_and = requests.get(api_url, params=query_params)
+    print(response_and.json)
 
     articles = []
 
@@ -179,14 +181,19 @@ def fetch_news(request):
         news_data_and = response_and.json()
         articles.extend(news_data_and.get('articles', []))
 
+    print(len(articles))
+
     # Check the number of articles returned by the "AND" query
     if len(articles) < 10:
         # If less than 10 articles, make the "OR" query
         topics_query_or = ' OR '.join(f'"{topic}"' for topic in topics)
         query_params['q'] = topics_query_or
+        print(topics_query_or)
         response_or = requests.get(api_url, params=query_params)
+
         if response_or.status_code == 200:
             news_data_or = response_or.json()
+            print(news_data_or)
             articles.extend(news_data_or.get('articles', []))
 
     if not articles:
@@ -232,26 +239,6 @@ def register_user(request):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-# def clean_keywords(keywords):
-#   clean_keywords = []
-#   print("here")
-
-#   if len(keywords.split(',')) != 10:
-#     raise ValueError("Incorrect number of keywords (expected 10)")
-
-#   for keyword in keywords.split(','):
-#     # Remove leading and trailing quotes if present (using regular expressions)
-#     import re
-#     cleaned_keyword = re.sub(r'^"|"$', '', keyword)
-#     # Remove any remaining quotes within the phrase (optional)
-#     cleaned_keyword = cleaned_keyword.replace('"', '')  # Can be commented out if internal quotes are allowed
-#     cleaned_keyword = cleaned_keyword.replace(',', '')  # Can be commented out if internal quotes are allowed
-#     cleaned_keyword = keyword.split('.')[1].strip()
-
-#     clean_keywords.append(cleaned_keyword)
-
-#   return clean_keywords
-
 def clean_keywords(keywords):
   clean_keywords = []
 
@@ -260,14 +247,14 @@ def clean_keywords(keywords):
     raise ValueError("Incorrect number of keywords (expected 10)")
   
   for keyword in keywords.split(','):
-    # Remove leading and trailing quotes if present (using regular expressions)
     import re
     cleaned_keyword = re.sub(r'^"|"$', '', keyword)
     # .strip()
 
-    # Separate words with commas, replace existing commas within words
-    cleaned_keyword = cleaned_keyword.replace('"', '')  # Can be commented out if internal quotes are allowed
+    cleaned_keyword = cleaned_keyword.replace('"', '')
     clean_keyword = cleaned_keyword.replace(',', ' ').split(' ')
+    cleaned_keyword = cleaned_keyword.strip()
+
     clean_keyword = ' '.join(clean_keyword)  # Join back with commas
     clean_keywords.append(clean_keyword)
 
@@ -311,14 +298,16 @@ def learning_goal(request):
             clean = clean_keywords(keywords)
             print('clean_keywords {}'.format(clean))
             return Response({'status': 'success', 'GeneratedTags': clean})
-        if len(keywords.split(',')) != 10:
-            return Response({'error': 'Unexpected keyword format (expected 10 keywords)'}, status=500)
+        # if len(keywords.split(',')) != 10:
+        #     return Response({'error': 'Unexpected keyword format (expected 10 keywords)'}, status=500)
 
 
         elif "\n" in keywords:
         # Extract keywords without numbering and newlines (modify based on separator)
             keywords = [keyword.strip().rstrip(',') for keyword in keywords.split('\n')]
             keywords = [keyword.strip('"') for keyword in keywords]
+            pattern = r"^\d+\.\s?"
+            keywords = [re.sub(pattern, "", keyword) for keyword in keywords]
             print("here {}".format(keywords))
 
         elif len(keywords.split(',')) == 1:
@@ -366,6 +355,37 @@ def generate_summary(request):
         return Response({'error': 'Failed to process the generate summary request'}, status=500)
 
 
+@api_view(['POST'])
+def getHashtag(request):
+    content = request.data.get('learningGoal')
+    if not content:
+        return Response({'error': 'No text provided!'}, status=400)
+    
+    client = OpenAI(api_key=config('OPENAI_API_KEY'))
+
+    if not client:
+        raise ValueError("Missing OpenAI API key.")
+
+    # prompt_text = f"Given the text: \"{content}\", generate a summary which would make sense when an audio is generated from it."
+    prompt_text = f"Give me a hashtag for this learning goal: \"{content}\""
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[{
+                "role": "user",
+                "content": prompt_text}])
+            # max_tokens=5)
+
+        generatedHashtag = response.choices[0].message.content.strip()
+        print("generatedHashtag {}".format(generatedHashtag))
+        return Response({'status': 'success', 'generatedHashtag': generatedHashtag})
+
+    except Exception as e:
+        print(f"OpenAI API call failed: {e}")
+        return Response({'error': 'Failed to process the generate summary request'}, status=500)
+
+
 def serve_audio(request, filename):
     # Define the path to the cache directory
     cache_directory = os.path.join(BASE_DIR, 'audio_cache')
@@ -389,12 +409,14 @@ def generate_audio(request, cache_directory='audio_cache'):
 
     # Extract the article content from the request.
     summary = request.data.get('articleContent')
+    url = request.data.get('articleURL')
 
     # Check if the article content is provided.
     if not summary:
         return Response({'error': 'No article content provided!'}, status=status.HTTP_400_BAD_REQUEST)
     
     client = OpenAI(api_key=config('OPENAI_API_KEY'))
+    print(url)
 
     filename = f"{md5(summary.encode('utf-8')).hexdigest()}.mp3"
     filepath = os.path.join(cache_directory, filename)
