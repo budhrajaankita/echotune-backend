@@ -150,16 +150,16 @@ def fetch_news(request):
     sources = profile.sources.all()
 
     # Constructing the query
-    topics = [topic.name for topic in profile.topics.all()]
+    # topics = [topic.name for topic in profile.topics.all()]
     # TODO: first try ADD, and then append OR to the results
-    topics_query_and = ' AND '.join(f'"{topic}"' for topic in topics)
+    # topics_query_and = ' OR '.join(f'{topic.strip()}' for topic in topics)
 
-    # yesterday = datetime.date.today() - datetime.timedelta(days=1)
-    # yesterday_formatted = yesterday.strftime('%Y-%m-%dT00:00:00Z')
+    topics_query = ' OR '.join([f'"{topic.name.strip()}"' for topic in profile.topics.all()])
 
+    print(topics_query)
 
     query_params = {
-        'q': topics_query_and,
+        'q': topics_query,
         'lang': 'en', 
         'sortBy': 'publishedAt',
         'apikey': settings.GNEWS_API_KEY,
@@ -167,55 +167,104 @@ def fetch_news(request):
         'expand': 'content'
     }
 
-    print(topics_query_and)
+    try:
+        response = requests.get('https://gnews.io/api/v4/search', params=query_params)
+        print(response)
+        response.raise_for_status()  # Raises a HTTPError for bad responses
+        articles = response.json().get('articles', [])
+
+        if len(articles) < 10:
+            query_params['q'] = ' OR '.join([f'{topic.name.strip()}' for topic in profile.topics.all()])
+
+            response = requests.get('https://gnews.io/api/v4/search', params=query_params)
+            response.raise_for_status()
+            articles.extend(response.json().get('articles', []))
+
+        if not articles:
+            return Response({"error": "No articles found"}, status=404)
+
+        formatted_news = [{
+            "id": idx,
+            "title": article["title"],
+            "description": article["description"],
+            "content": article["content"],
+            "url": article["url"],
+            "image": article["image"],
+            "publishedAt": article["publishedAt"],
+            "source_name": article["source"]["name"],
+            "source_url": article["source"]["url"]
+        } for idx, article in enumerate(articles[:20])]
+
+        return Response(formatted_news)
+
+    except requests.RequestException as e:
+        return Response({"error": str(e)}, status=500)
+
+    # topics_query_and = ' OR '.join(f'{topic.strip()}' for topic in topics)
+
+    # # yesterday = datetime.date.today() - datetime.timedelta(days=1)
+    # # yesterday_formatted = yesterday.strftime('%Y-%m-%dT00:00:00Z')
 
 
-     # Making the request to GNews API
-    api_url = 'https://gnews.io/api/v4/search'
-    response_and = requests.get(api_url, params=query_params)
-    print(response_and.json)
+    # query_params = {
+    #     'q': topics_query_and,
+    #     'lang': 'en', 
+    #     'sortBy': 'publishedAt',
+    #     # 'apikey': settings.GNEWS_API_KEY,
+    #     'api_key': "db39120f6e8914d63f070ea2b05d7a10",
+    #     'max': 12,
+    #     'expand': 'content'
+    # }
 
-    articles = []
+    # print(topics_query_and)
 
-    if response_and.status_code == 200:
-        news_data_and = response_and.json()
-        articles.extend(news_data_and.get('articles', []))
 
-    print(len(articles))
+    #  # Making the request to GNews API
+    # api_url = 'https://gnews.io/api/v4/search'
+    # response_and = requests.get(api_url, params=query_params)
+    # print(response_and.json)
 
-    # Check the number of articles returned by the "AND" query
-    if len(articles) < 10:
-        # If less than 10 articles, make the "OR" query
-        topics_query_or = ' OR '.join(f'"{topic}"' for topic in topics)
-        query_params['q'] = topics_query_or
-        print(topics_query_or)
-        response_or = requests.get(api_url, params=query_params)
+    # articles = []
 
-        if response_or.status_code == 200:
-            news_data_or = response_or.json()
-            print(news_data_or)
-            articles.extend(news_data_or.get('articles', []))
+    # if response_and.status_code == 200:
+    #     news_data_and = response_and.json()
+    #     articles.extend(news_data_and.get('articles', []))
 
-    if not articles:
-        # If no articles found after both queries, return an error response
-        return Response({"error": "No articles found"}, status=404)
+    # print(len(articles))
+
+    # # Check the number of articles returned by the "AND" query
+    # if len(articles) < 10:
+    #     # If less than 10 articles, make the "OR" query
+    #     topics_query_or = ' OR '.join(f'{topic.strip()}' for topic in topics)
+    #     query_params['q'] = topics_query_or
+    #     print(query_params)
+    #     response_or = requests.get(api_url, params=query_params)
+
+    #     if response_or.status_code == 200:
+    #         news_data_or = response_or.json()
+    #         print(news_data_or)
+    #         articles.extend(news_data_or.get('articles', []))
+
+    # if not articles:
+    #     # If no articles found after both queries, return an error response
+    #     return Response({"error": "No articles found"}, status=404)
     
-    # print(articles)
+    # # print(articles)
 
-    # Formatting the response
-    formatted_news = [{
-        "id": idx,
-        "title": article["title"],
-        "description": article["description"],
-        "content": article["content"],
-        "url": article["url"],
-        "image": article["image"],
-        "publishedAt": article["publishedAt"],
-        "source_name": article["source"]["name"],
-        "source_url": article["source"]["url"]
-    } for idx, article in enumerate(articles[:20])]
+    # # Formatting the response
+    # formatted_news = [{
+    #     "id": idx,
+    #     "title": article["title"],
+    #     "description": article["description"],
+    #     "content": article["content"],
+    #     "url": article["url"],
+    #     "image": article["image"],
+    #     "publishedAt": article["publishedAt"],
+    #     "source_name": article["source"]["name"],
+    #     "source_url": article["source"]["url"]
+    # } for idx, article in enumerate(articles[:20])]
 
-    return Response(formatted_news)
+    # return Response(formatted_news)
 
 
 @api_view(['POST'])
