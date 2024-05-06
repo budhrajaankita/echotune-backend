@@ -162,8 +162,7 @@ def fetch_news(request):
         'q': topics_query_and,
         'lang': 'en', 
         'sortBy': 'publishedAt',
-        # 'apikey': settings.GNEWS_API_KEY,
-        'apikey': "db39120f6e8914d63f070ea2b05d7a10",
+        'apikey': settings.GNEWS_API_KEY,
         'max': 12,
         'expand': 'content'
     }
@@ -419,7 +418,7 @@ def generate_audio(request, cache_directory='audio_cache'):
     client = OpenAI(api_key=config('OPENAI_API_KEY'))
     print(title)
 
-    filename = f"{title[:20]}.wav"
+    filename = f"{title[:20]}.mp3"
 
     # filename = f"{md5(title.encode('utf-8')).hexdigest()}.mp3"
     filepath = os.path.join(cache_directory, filename)
