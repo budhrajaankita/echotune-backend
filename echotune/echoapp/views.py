@@ -152,7 +152,7 @@ def fetch_news(request):
     # Constructing the query
     topics = [topic.name for topic in profile.topics.all()]
     # TODO: first try ADD, and then append OR to the results
-    topics_query_and = ' OR '.join(f'"{topic}"' for topic in topics)
+    topics_query_and = ' AND '.join(f'"{topic}"' for topic in topics)
 
     # yesterday = datetime.date.today() - datetime.timedelta(days=1)
     # yesterday_formatted = yesterday.strftime('%Y-%m-%dT00:00:00Z')
@@ -162,7 +162,8 @@ def fetch_news(request):
         'q': topics_query_and,
         'lang': 'en', 
         'sortBy': 'publishedAt',
-        'apikey': settings.GNEWS_API_KEY,
+        # 'apikey': settings.GNEWS_API_KEY,
+        'apikey': "db39120f6e8914d63f070ea2b05d7a10",
         'max': 12,
         'expand': 'content'
     }
@@ -409,16 +410,18 @@ def generate_audio(request, cache_directory='audio_cache'):
 
     # Extract the article content from the request.
     summary = request.data.get('articleContent')
-    url = request.data.get('articleURL')
+    title = request.data.get('articleTitle')
 
     # Check if the article content is provided.
     if not summary:
         return Response({'error': 'No article content provided!'}, status=status.HTTP_400_BAD_REQUEST)
     
     client = OpenAI(api_key=config('OPENAI_API_KEY'))
-    print(url)
+    print(title)
 
-    filename = f"{md5(summary.encode('utf-8')).hexdigest()}.mp3"
+    filename = f"{title[:20]}.wav"
+
+    # filename = f"{md5(title.encode('utf-8')).hexdigest()}.mp3"
     filepath = os.path.join(cache_directory, filename)
 
     # Check if the file already exists
