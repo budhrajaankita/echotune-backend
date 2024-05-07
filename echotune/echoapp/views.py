@@ -22,6 +22,7 @@ from django.http import HttpResponseNotFound, FileResponse
 import os
 from hashlib import md5
 import logging
+import urllib.parse
 
 
 @api_view(['POST'])
@@ -108,19 +109,33 @@ def save_preferences(request):
 
     # Save topics and sources for either profile
     # profile.topics.clear()
-    for name in topics_names:
-        topic, _ = Topic.objects.get_or_create(name=name)
-        profile.topics.add(topic)
+    # for name in topics_names:
+    #     topic, _ = Topic.objects.get_or_create(name=name)
+    #     profile.topics.add(topic)
 
-    # profile.sources.clear()
-    for name in sources_names:
-        source, _ = Source.objects.get_or_create(name=name)
-        profile.sources.add(source)
+    # # profile.sources.clear()
+    # for name in sources_names:
+    #     source, _ = Source.objects.get_or_create(name=name)
+    #     profile.sources.add(source)
     
-    # profile.hashtags.clear()
-    for name in hashtags_names:
-        hashtag, _ = Hashtag.objects.get_or_create(name=name)
-        hashtag.topics.set(profile.topics.all())
+    # # profile.hashtags.clear()
+    # for name in hashtags_names:
+    #     hashtag, _ = Hashtag.objects.get_or_create(name=name)
+    #     hashtag.topics.set(profile.topics.all())
+    #     profile.hashtags.add(hashtag)
+
+    # Update topics
+    new_topics = [Topic.objects.get_or_create(name=name)[0] for name in topics_names]
+    profile.topics.set(new_topics)  # Update topics association
+
+    # Update sources
+    new_sources = [Source.objects.get_or_create(name=name)[0] for name in sources_names]
+    profile.sources.set(new_sources)  # Update sources association
+
+    # Update hashtags
+    new_hashtags = [Hashtag.objects.get_or_create(name=name)[0] for name in hashtags_names]
+    for hashtag in new_hashtags:
+        hashtag.topics.set(new_topics)
         profile.hashtags.add(hashtag)
     
     profile.save()
@@ -152,8 +167,8 @@ def get_user_hashtags(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def fetch_news(request):
-    is_guest = request.query_params.get('is_guest')
+def get_topics_for_hashtag(request, hashtag_name):
+    is_guest = request.query_params.get('is_guest') == 'true'
     session_id = request.query_params.get('session_id', None)
 
     if is_guest and session_id:
@@ -163,42 +178,72 @@ def fetch_news(request):
 
     if not profile:
         return Response({"error": "Profile not found"}, status=404)
-    
-    print(profile)
-
-    topics = profile.topics.all()
-    sources = profile.sources.all()
-
-    # Constructing the query
-    # topics = [topic.name for topic in profile.topics.all()]
-    # TODO: first try ADD, and then append OR to the results
-    # topics_query_and = ' OR '.join(f'{topic.strip()}' for topic in topics)
-
-    topics_query = ' OR '.join([f'"{topic.name.strip()}"' for topic in profile.topics.all()])
-
-    print(topics_query)
-
-    query_params = {
-        'q': topics_query,
-        'lang': 'en', 
-        'sortBy': 'publishedAt',
-        'apikey': settings.GNEWS_API_KEY,
-        'max': 12,
-        'expand': 'content'
-    }
 
     try:
+        hashtag = Hashtag.objects.get(name=hashtag_name)
+
+        # Check if the profile is associated with this hashtag
+        if is_guest:
+            if not profile.hashtags.filter(id=hashtag.id).exists():
+                return Response({"error": "Hashtag not found for this guest"}, status=404)
+        else:
+            if not profile.hashtags.filter(id=hashtag.id).exists():
+                return Response({"error": "Hashtag not found for this user"}, status=404)
+
+        topics = hashtag.topics.all()
+        topics_data = [{'id': topic.id, 'name': topic.name} for topic in topics]
+        return Response(topics_data)
+    except Hashtag.DoesNotExist:
+        return Response({"error": "Hashtag not found"}, status=404)
+
+# @api_view(['GET'])
+# @permission_classes([IsAuthenticated])
+# def get_topics_for_hashtag(request, hashtag_name):
+#     try:
+#         hashtag = Hashtag.objects.get(name=hashtag_name)
+#         topics = hashtag.topics.all()
+#         topics_data = [{'id': topic.id, 'name': topic.name} for topic in topics]
+#         return Response(topics_data)
+#     except Hashtag.DoesNotExist:
+#         return Response({"error": "Hashtag not found"}, status=404)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def fetch_news(request):
+    is_guest = request.query_params.get('is_guest')
+    session_id = request.query_params.get('session_id', None)
+    topics_query = request.query_params.get('q', None).replace('"', '').strip()
+    print(f"Original topics_query is: {topics_query}")
+
+    if is_guest and session_id:
+        profile = GuestProfile.objects.filter(session_id=session_id).first()
+    else:
+        profile = UserProfile.objects.filter(user=request.user).first()
+
+    if not profile:
+        return Response({"error": "Profile not found"}, status=404)
+    
+    def get_articles(query):
+        query_params = {
+            'q': query,
+            'lang': 'en',
+            'sortBy': 'publishedAt',
+            'apikey': settings.GNEWS_API_KEY,
+            'max': 20,
+            'expand': 'content'
+        }
         response = requests.get('https://gnews.io/api/v4/search', params=query_params)
-        print(response)
-        response.raise_for_status()  # Raises a HTTPError for bad responses
-        articles = response.json().get('articles', [])
+        response.raise_for_status()
+        return response.json().get('articles', [])
+    
+    try:
+        articles = get_articles(topics_query)
 
-        if len(articles) < 10:
-            query_params['q'] = ' OR '.join([f'{topic.name.strip()}' for topic in profile.topics.all()])
-
-            response = requests.get('https://gnews.io/api/v4/search', params=query_params)
-            response.raise_for_status()
-            articles.extend(response.json().get('articles', []))
+        # Fall back to a broader query if no articles found
+        if not articles:
+            print(f"No articles found for query: {topics_query}")
+            broad_query = topics_query.split(" OR ")[0]  # Use only the first part of the query
+            articles = get_articles(broad_query)
 
         if not articles:
             return Response({"error": "No articles found"}, status=404)
@@ -219,6 +264,76 @@ def fetch_news(request):
 
     except requests.RequestException as e:
         return Response({"error": str(e)}, status=500)
+
+# @api_view(['GET'])
+# @permission_classes([IsAuthenticated])
+# def fetch_news(request):
+#     is_guest = request.query_params.get('is_guest')
+#     session_id = request.query_params.get('session_id', None)
+
+#     if is_guest and session_id:
+#         profile = GuestProfile.objects.filter(session_id=session_id).first()
+#     else:
+#         profile = UserProfile.objects.filter(user=request.user).first()
+
+#     if not profile:
+#         return Response({"error": "Profile not found"}, status=404)
+    
+#     print(profile)
+
+#     topics = profile.topics.all()
+#     sources = profile.sources.all()
+
+#     # Constructing the query
+#     # topics = [topic.name for topic in profile.topics.all()]
+#     # TODO: first try ADD, and then append OR to the results
+#     # topics_query_and = ' OR '.join(f'{topic.strip()}' for topic in topics)
+
+#     topics_query = ' OR '.join([f'"{topic.name.strip()}"' for topic in profile.topics.all()])
+
+#     print(topics_query)
+
+#     query_params = {
+#         'q': topics_query,
+#         'lang': 'en', 
+#         'sortBy': 'publishedAt',
+#         'apikey': settings.GNEWS_API_KEY,
+#         'max': 12,
+#         'expand': 'content'
+#     }
+
+#     try:
+#         response = requests.get('https://gnews.io/api/v4/search', params=query_params)
+#         print(response)
+#         response.raise_for_status()  # Raises a HTTPError for bad responses
+#         articles = response.json().get('articles', [])
+
+#         if len(articles) < 10:
+#             query_params['q'] = ' OR '.join([f'{topic.name.strip()}' for topic in profile.topics.all()])
+
+#             response = requests.get('https://gnews.io/api/v4/search', params=query_params)
+#             response.raise_for_status()
+#             articles.extend(response.json().get('articles', []))
+
+#         if not articles:
+#             return Response({"error": "No articles found"}, status=404)
+
+#         formatted_news = [{
+#             "id": idx,
+#             "title": article["title"],
+#             "description": article["description"],
+#             "content": article["content"],
+#             "url": article["url"],
+#             "image": article["image"],
+#             "publishedAt": article["publishedAt"],
+#             "source_name": article["source"]["name"],
+#             "source_url": article["source"]["url"]
+#         } for idx, article in enumerate(articles[:20])]
+
+#         return Response(formatted_news)
+
+#     except requests.RequestException as e:
+#         return Response({"error": str(e)}, status=500)
 
     # topics_query_and = ' OR '.join(f'{topic.strip()}' for topic in topics)
 
