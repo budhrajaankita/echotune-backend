@@ -188,4 +188,6 @@ CORS_ALLOW_ALL_ORIGINS = True
 
 
 # Google news API key
-GNEWS_API_KEY = os.getenv('GNEWS_API_KEY')
+GNEWS_API_KEY = config('GNEWS_API_KEY')
+
+# GNEWS_API_KEY = os.getenv('GNEWS_API_KEY')

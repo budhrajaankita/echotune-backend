@@ -1,5 +1,7 @@
+import datetime
 from http.client import HTTPResponse
 from io import BytesIO
+import re
 from echotune.settings import BASE_DIR
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
@@ -148,41 +150,122 @@ def fetch_news(request):
     sources = profile.sources.all()
 
     # Constructing the query
-    topics = [topic.name for topic in profile.topics.all()]
+    # topics = [topic.name for topic in profile.topics.all()]
     # TODO: first try ADD, and then append OR to the results
-    topics_query = ' OR '.join(topics)
+    # topics_query_and = ' OR '.join(f'{topic.strip()}' for topic in topics)
+
+    topics_query = ' OR '.join([f'"{topic.name.strip()}"' for topic in profile.topics.all()])
+
+    print(topics_query)
+
     query_params = {
         'q': topics_query,
         'lang': 'en', 
-        'sortBy': 'publishedAt',  # Sort by publication date
+        'sortBy': 'publishedAt',
         'apikey': settings.GNEWS_API_KEY,
-        'expand' : 'content'
+        'max': 12,
+        'expand': 'content'
     }
 
-    # Making the request to GNews API
-    api_url = 'https://gnews.io/api/v4/search'
-    response = requests.get(api_url, params=query_params)
+    try:
+        response = requests.get('https://gnews.io/api/v4/search', params=query_params)
+        print(response)
+        response.raise_for_status()  # Raises a HTTPError for bad responses
+        articles = response.json().get('articles', [])
+
+        if len(articles) < 10:
+            query_params['q'] = ' OR '.join([f'{topic.name.strip()}' for topic in profile.topics.all()])
+
+            response = requests.get('https://gnews.io/api/v4/search', params=query_params)
+            response.raise_for_status()
+            articles.extend(response.json().get('articles', []))
+
+        if not articles:
+            return Response({"error": "No articles found"}, status=404)
+
+        formatted_news = [{
+            "id": idx,
+            "title": article["title"],
+            "description": article["description"],
+            "content": article["content"],
+            "url": article["url"],
+            "image": article["image"],
+            "publishedAt": article["publishedAt"],
+            "source_name": article["source"]["name"],
+            "source_url": article["source"]["url"]
+        } for idx, article in enumerate(articles[:20])]
+
+        return Response(formatted_news)
+
+    except requests.RequestException as e:
+        return Response({"error": str(e)}, status=500)
+
+    # topics_query_and = ' OR '.join(f'{topic.strip()}' for topic in topics)
+
+    # # yesterday = datetime.date.today() - datetime.timedelta(days=1)
+    # # yesterday_formatted = yesterday.strftime('%Y-%m-%dT00:00:00Z')
+
+
+    # query_params = {
+    #     'q': topics_query_and,
+    #     'lang': 'en', 
+    #     'sortBy': 'publishedAt',
+    #     # 'apikey': settings.GNEWS_API_KEY,
+    #     'api_key': "db39120f6e8914d63f070ea2b05d7a10",
+    #     'max': 12,
+    #     'expand': 'content'
+    # }
+
+    # print(topics_query_and)
+
+
+    #  # Making the request to GNews API
+    # api_url = 'https://gnews.io/api/v4/search'
+    # response_and = requests.get(api_url, params=query_params)
+    # print(response_and.json)
+
+    # articles = []
+
+    # if response_and.status_code == 200:
+    #     news_data_and = response_and.json()
+    #     articles.extend(news_data_and.get('articles', []))
+
+    # print(len(articles))
+
+    # # Check the number of articles returned by the "AND" query
+    # if len(articles) < 10:
+    #     # If less than 10 articles, make the "OR" query
+    #     topics_query_or = ' OR '.join(f'{topic.strip()}' for topic in topics)
+    #     query_params['q'] = topics_query_or
+    #     print(query_params)
+    #     response_or = requests.get(api_url, params=query_params)
+
+    #     if response_or.status_code == 200:
+    #         news_data_or = response_or.json()
+    #         print(news_data_or)
+    #         articles.extend(news_data_or.get('articles', []))
+
+    # if not articles:
+    #     # If no articles found after both queries, return an error response
+    #     return Response({"error": "No articles found"}, status=404)
     
-    if response.status_code != 200:
-        # Handling possible errors from the API request
-        return Response({"error": "Failed to fetch news from GNews"}, status=response.status_code)
+    # # print(articles)
 
-    news_data = response.json()
+    # # Formatting the response
+    # formatted_news = [{
+    #     "id": idx,
+    #     "title": article["title"],
+    #     "description": article["description"],
+    #     "content": article["content"],
+    #     "url": article["url"],
+    #     "image": article["image"],
+    #     "publishedAt": article["publishedAt"],
+    #     "source_name": article["source"]["name"],
+    #     "source_url": article["source"]["url"]
+    # } for idx, article in enumerate(articles[:20])]
 
-    # Formatting the response
-    formatted_news = [{
-        "id": idx,
-        "title": article["title"],
-        "description": article["description"],
-        "content": article["content"],
-        "url": article["url"],
-        "image": article["image"],
-        "publishedAt": article["publishedAt"],
-        "source_name": article["source"]["name"],
-        "source_url": article["source"]["url"]
-    } for idx, article in enumerate(news_data.get('articles', []))]
+    # return Response(formatted_news)
 
-    return Response(formatted_news)
 
 @api_view(['POST'])
 def register_user(request):
@@ -204,6 +287,28 @@ def register_user(request):
     else:
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+
+def clean_keywords(keywords):
+  clean_keywords = []
+
+  # Check for unexpected format (optional)
+  if len(keywords.split(',')) < 5:
+    raise ValueError("Incorrect number of keywords (expected 10)")
+  
+  for keyword in keywords.split(','):
+    import re
+    cleaned_keyword = re.sub(r'^"|"$', '', keyword)
+    # .strip()
+
+    cleaned_keyword = cleaned_keyword.replace('"', '')
+    clean_keyword = cleaned_keyword.replace(',', ' ').split(' ')
+    cleaned_keyword = cleaned_keyword.strip()
+
+    clean_keyword = ' '.join(clean_keyword)  # Join back with commas
+    clean_keywords.append(clean_keyword)
+
+
+  return (clean_keywords)
      
 
 @api_view(['POST'])
@@ -218,20 +323,50 @@ def learning_goal(request):
 
     if not client:
         raise ValueError("Missing OpenAI API key.")
+    
 
-    prompt_text = f"Given the text: \"{learning_goal}\", identify 10 most relevant keywords or tags that can help categorize articles related to this topic. Create a list based on relevance. Return the list as comma separated values"
+    # prompt_text = f"Given the user goal: \"{learning_goal}\", create an ordered comma separated values List of 10 most relevant keywords that might help identify news articles. confirm the format of output: keyword a, keyword b, keyword c"
+    prompt_text = f"Take this learning goal : \"{learning_goal}\" and come up with 10 distinct most relevant 1-2 word search query strings to retrieve articles about this topic. Return these 10 queries in comma separated values (CSV) format"
+    
     try:
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[{
-                "role": "user",
-                "content": prompt_text}])
+                "role": "system", "content": "You are a helpful assistant designed to output comma separated values.",
+                "role": "user", "content": prompt_text}])
+                # "role": "user",
+                # "content": prompt_text}])
             # max_tokens=5)
 
     #     # keywords = response.choices[0].text.strip()
-        generateTags = response.choices[0].message.content.strip()
-        print(generateTags)
-        return Response({'status': 'success', 'GeneratedTags': generateTags})
+
+        keywords = response.choices[0].message.content.strip()
+        print(keywords)
+        print(len(keywords.split(',')))
+        if len(keywords.split(',')) > 5:
+            clean = clean_keywords(keywords)
+            print('clean_keywords {}'.format(clean))
+            return Response({'status': 'success', 'GeneratedTags': clean})
+        # if len(keywords.split(',')) != 10:
+        #     return Response({'error': 'Unexpected keyword format (expected 10 keywords)'}, status=500)
+
+
+        elif "\n" in keywords:
+        # Extract keywords without numbering and newlines (modify based on separator)
+            keywords = [keyword.strip().rstrip(',') for keyword in keywords.split('\n')]
+            keywords = [keyword.strip('"') for keyword in keywords]
+            pattern = r"^\d+\.\s?"
+            keywords = [re.sub(pattern, "", keyword) for keyword in keywords]
+            print("here {}".format(keywords))
+
+        elif len(keywords.split(',')) == 1:
+            keywords = keywords.split(',')
+        # Check if we have at least one keyword (adjust as needed)
+        if len(keywords) < 1:
+            return Response({'error': 'Failed to generate keywords'}, status=500)
+
+
+        return Response({'status': 'success', 'GeneratedTags': keywords})
     except Exception as e:
         print(f"OpenAI API call failed: {e}")
         return Response({'error': 'Failed to process the request'}, status=500)
@@ -249,7 +384,9 @@ def generate_summary(request):
     if not client:
         raise ValueError("Missing OpenAI API key.")
 
-    prompt_text = f"Given the text: \"{content}\", generate a summary which would make sense when an audio is generated from it."
+    # prompt_text = f"Given the text: \"{content}\", generate a summary which would make sense when an audio is generated from it."
+    prompt_text = f"Given the text: \"{content}\", generate a summary for spoken delivery of the following article that should last between 1 to 2 minutes. Focus on capturing the main points, important details, and any notable quotes or statistics. The summary should be engaging, easy to follow, and provide a clear understanding of the article's content. Don't give me keywords like summary in the output"
+
     try:
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
@@ -261,6 +398,37 @@ def generate_summary(request):
         generatedSummary = response.choices[0].message.content.strip()
         print(generatedSummary)
         return Response({'status': 'success', 'generateSummary': generatedSummary})
+
+    except Exception as e:
+        print(f"OpenAI API call failed: {e}")
+        return Response({'error': 'Failed to process the generate summary request'}, status=500)
+
+
+@api_view(['POST'])
+def getHashtag(request):
+    content = request.data.get('learningGoal')
+    if not content:
+        return Response({'error': 'No text provided!'}, status=400)
+    
+    client = OpenAI(api_key=config('OPENAI_API_KEY'))
+
+    if not client:
+        raise ValueError("Missing OpenAI API key.")
+
+    # prompt_text = f"Given the text: \"{content}\", generate a summary which would make sense when an audio is generated from it."
+    prompt_text = f"Give me a hashtag for this learning goal: \"{content}\""
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[{
+                "role": "user",
+                "content": prompt_text}])
+            # max_tokens=5)
+
+        generatedHashtag = response.choices[0].message.content.strip()
+        print("generatedHashtag {}".format(generatedHashtag))
+        return Response({'status': 'success', 'generatedHashtag': generatedHashtag})
 
     except Exception as e:
         print(f"OpenAI API call failed: {e}")
@@ -290,14 +458,18 @@ def generate_audio(request, cache_directory='audio_cache'):
 
     # Extract the article content from the request.
     summary = request.data.get('articleContent')
+    title = request.data.get('articleTitle')
 
     # Check if the article content is provided.
     if not summary:
         return Response({'error': 'No article content provided!'}, status=status.HTTP_400_BAD_REQUEST)
     
     client = OpenAI(api_key=config('OPENAI_API_KEY'))
+    print(title)
 
-    filename = f"{md5(summary.encode('utf-8')).hexdigest()}.mp3"
+    filename = f"{title[:20]}.mp3"
+
+    # filename = f"{md5(title.encode('utf-8')).hexdigest()}.mp3"
     filepath = os.path.join(cache_directory, filename)
 
     # Check if the file already exists
@@ -305,13 +477,12 @@ def generate_audio(request, cache_directory='audio_cache'):
 
         response = client.audio.speech.create(
         model="tts-1",
-        voice="alloy",
+        voice="echo",
         input=summary,
     )      
         # Save the audio file
         with open(filepath, 'wb') as audio_file:
             audio_file.write(response.content)
-            print("D")
 
         print(f"Generated and saved audio to {filepath}")
     else:
