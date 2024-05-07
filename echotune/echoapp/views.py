@@ -9,7 +9,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.authtoken.models import Token
 from rest_framework.authtoken.serializers import AuthTokenSerializer
 from rest_framework import status
-from .models import UserProfile, GuestProfile, Topic, Source
+from .models import UserProfile, GuestProfile, Topic, Source, Hashtag
 from .serializers import UserSerializer
 import requests
 import uuid
@@ -96,8 +96,10 @@ def save_preferences(request):
 
     topics_names = request.data.get('topics', [])
     sources_names = request.data.get('sources', [])
+    hashtags_names = request.data.get('hashtags', [])
     print(topics_names)
     print(sources_names)
+    print(hashtags_names)
 
     if is_guest and session_id:
         profile, _ = GuestProfile.objects.get_or_create(session_id=session_id)
@@ -114,6 +116,14 @@ def save_preferences(request):
     for name in sources_names:
         source, _ = Source.objects.get_or_create(name=name)
         profile.sources.add(source)
+    
+    profile.hashtags.clear()
+    for name in hashtags_names:
+        hashtag, _ = Hashtag.objects.get_or_create(name=name)
+        hashtag.topics.set(profile.topics.all())
+        profile.hashtags.add(hashtag)
+    
+    profile.save()
 
     return Response({"message": "Preferences saved successfully"})
 
