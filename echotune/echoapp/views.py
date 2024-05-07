@@ -107,17 +107,17 @@ def save_preferences(request):
         profile, _ = UserProfile.objects.get_or_create(user=request.user)
 
     # Save topics and sources for either profile
-    profile.topics.clear()
+    # profile.topics.clear()
     for name in topics_names:
         topic, _ = Topic.objects.get_or_create(name=name)
         profile.topics.add(topic)
 
-    profile.sources.clear()
+    # profile.sources.clear()
     for name in sources_names:
         source, _ = Source.objects.get_or_create(name=name)
         profile.sources.add(source)
     
-    profile.hashtags.clear()
+    # profile.hashtags.clear()
     for name in hashtags_names:
         hashtag, _ = Hashtag.objects.get_or_create(name=name)
         hashtag.topics.set(profile.topics.all())
@@ -139,6 +139,16 @@ def get_user_topics(request):
     else:
         return Response({"error": "User is not authenticated"}, status=status.HTTP_401_UNAUTHORIZED)
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_user_hashtags(request):
+    if request.user.is_authenticated:
+        user_profile = request.user.userprofile
+        hashtags = user_profile.hashtags.all()
+        hashtags_data = [{'id': hashtag.id, 'name': hashtag.name} for hashtag in hashtags]
+        return Response(hashtags_data)
+    else:
+        return Response({"error": "User is not authenticated"}, status=status.HTTP_401_UNAUTHORIZED)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])

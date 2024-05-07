@@ -17,7 +17,7 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path
 from django.contrib.auth import views as auth_views
-from echoapp.views import register_user, save_preferences, learning_goal, login_user, fetch_news, generate_summary, generate_audio, serve_audio, get_user_topics, getHashtag
+from echoapp.views import register_user, save_preferences, learning_goal, login_user, fetch_news, generate_summary, generate_audio, serve_audio, get_user_hashtags, get_user_topics, getHashtag
 
 
 urlpatterns = [
@@ -33,6 +33,7 @@ urlpatterns = [
     path('api/generate_summary/', generate_summary, name='generate_summary'),
     path('audio/<str:filename>/', serve_audio, name='serve_audio'),
     path('api/get_user_topics/', get_user_topics, name='get_user_topics'),
+    path('api/get_user_hashtags/', get_user_hashtags, name='get_user_hashtags'),
     path('api/getHashtag/', getHashtag, name='getHashtag'),
 
 ]
