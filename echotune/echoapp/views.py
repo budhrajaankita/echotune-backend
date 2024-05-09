@@ -484,7 +484,7 @@ def generate_audio(request, cache_directory='audio_cache'):
     client = OpenAI(api_key=config('OPENAI_API_KEY'))
     print(title)
 
-    title_sanitized = sanitize_filename(title[:20])
+    title_sanitized = sanitize_filename(title[:32])
     filename = f"{title_sanitized}.wav"
     
     filepath = os.path.join(cache_directory, filename)
